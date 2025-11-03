@@ -1,4 +1,4 @@
-module github.com/Psybernetic7/httpfromtcp
+module github.com/Psybernetic7/http-server
 
 go 1.25.2
 
