@@ -35,7 +35,26 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 	if len(key) == 0 {
 		return 0, false, fmt.Errorf("empty key")
 	}
+	for _, b := range key {
+		if !isValidHeaderChar(byte(b)) {
+			return 0, false, fmt.Errorf("invalid header key character: %q", b)
+		}
+	}
+	key = bytes.ToLower(key)
 	h[string(key)] = string(value)
 	return idx + 2, false, nil
 
+}
+
+func isValidHeaderChar(b byte) bool {
+	// letters and digits
+	if ('a' <= b && b <= 'z') || ('A' <= b && b <= 'Z') || ('0' <= b && b <= '9') {
+		return true
+	}
+	// allowed specials: ! # $ % & ' * + - . ^ _ ` | ~
+	switch b {
+	case '!', '#', '$', '%', '&', '\'', '*', '+', '-', '.', '^', '_', '`', '|', '~':
+		return true
+	}
+	return false
 }
