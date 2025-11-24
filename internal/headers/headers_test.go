@@ -67,6 +67,19 @@ func Test_ValidTwoHeadersWithExisting(t *testing.T) {
 	assert.Equal(t, 2, n3) // "\r\n"
 }
 
+func Test_ValidDoubleHeaders(t *testing.T) {
+	h := NewHeaders()
+	h["set-person"] = "lane-loves-go"
+
+	data := []byte("Set-Person: prime-loves-zig\r\n\r\n")
+	n, done, err := h.Parse(data)
+	require.NoError(t, err)
+	assert.False(t, done)
+	assert.Equal(t, "lane-loves-go, prime-loves-zig", h["set-person"])
+	assert.Greater(t, n, 0)
+
+}
+
 func Test_ValidDone(t *testing.T) {
 	h := NewHeaders()
 	data := []byte("\r\nrest")

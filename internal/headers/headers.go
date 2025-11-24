@@ -41,7 +41,12 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 		}
 	}
 	key = bytes.ToLower(key)
-	h[string(key)] = string(value)
+	existing, ok := h[string(key)]
+	if ok {
+		h[string(key)] = existing + ", " + string(value)
+	} else {
+		h[string(key)] = string(value)
+	}
 	return idx + 2, false, nil
 
 }
