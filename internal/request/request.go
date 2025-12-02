@@ -5,10 +5,13 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/Psybernetic7/http-server/internal/headers"
 )
 
 type Request struct {
 	RequestLine RequestLine
+	Headers     headers.Headers
 	state       int
 }
 
@@ -17,6 +20,12 @@ type RequestLine struct {
 	RequestTarget string
 	Method        string
 }
+
+const (
+	requestStateParsingRequestLine = iota
+	requestStateParsingHeaders
+	requestStateDone
+)
 
 func isAllUpperAlpha(s string) bool {
 	if len(s) == 0 {
@@ -32,22 +41,19 @@ func isAllUpperAlpha(s string) bool {
 }
 
 func (r *Request) parse(data []byte) (int, error) {
-	switch r.state {
-	case 0: // initialized
-		consumed, rl, err := parseRequestLine(data)
+	total := 0
+	for {
+		if len(data[total:]) == 0 || r.state == requestStateDone {
+			return total, nil
+		}
+		n, err := r.parseSingle(data[total:])
 		if err != nil {
-			return 0, err
+			return total, err
 		}
-		if consumed == 0 {
-			return 0, nil // need more data
+		if n == 0 {
+			return total, nil
 		}
-		r.RequestLine = rl
-		r.state = 1
-		return consumed, nil
-	case 1: // done
-		return 0, fmt.Errorf("parser in done state")
-	default:
-		return 0, fmt.Errorf("unknown state: %d", r.state)
+		total += n
 	}
 }
 
@@ -87,9 +93,12 @@ func parseRequestLine(data []byte) (consumed int, rl RequestLine, err error) {
 func RequestFromReader(reader io.Reader) (*Request, error) {
 	buf := make([]byte, 8)
 	readTo := 0
-	req := &Request{state: 0}
+	req := &Request{
+		state:   requestStateParsingRequestLine,
+		Headers: headers.NewHeaders(),
+	}
 
-	for req.state != 1 {
+	for req.state != requestStateDone {
 		// grow if full
 		if readTo == len(buf) {
 			nb := make([]byte, len(buf)*2)
@@ -110,8 +119,8 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 					copy(buf, buf[consumed:readTo])
 					readTo -= consumed
 				}
-				if req.state != 1 {
-					return nil, fmt.Errorf("incomplete request line before EOF")
+				if req.state != requestStateDone {
+					return nil, fmt.Errorf("incomplete request before EOF")
 				}
 				break
 			}
@@ -132,10 +141,42 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 			copy(buf, buf[consumed:readTo])
 			readTo -= consumed
 			// if done, loop condition will exit
-			if req.state == 1 {
+			if req.state == requestStateDone {
 				break
 			}
 		}
 	}
 	return req, nil
+}
+
+func (r *Request) parseSingle(data []byte) (int, error) {
+	switch r.state {
+	case requestStateParsingRequestLine:
+		consumed, rl, err := parseRequestLine(data)
+		if err != nil {
+			return 0, err
+		}
+		if consumed == 0 {
+			return 0, nil
+		}
+		r.RequestLine = rl
+		r.state = requestStateParsingHeaders
+		return consumed, nil
+
+	case requestStateParsingHeaders:
+		n, done, err := r.Headers.Parse(data)
+		if err != nil {
+			return 0, err
+		}
+		if n == 0 {
+			return 0, nil
+		}
+		if done {
+			r.state = requestStateDone
+		}
+		return n, nil
+
+	default:
+		return 0, fmt.Errorf("unknown state: %d", r.state)
+	}
 }
